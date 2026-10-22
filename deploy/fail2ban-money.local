@@ -1,0 +1,18 @@
+# /etc/fail2ban/jail.d/money.local
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1 51.210.180.130
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+backend  = systemd
+
+[sshd]
+enabled = true
+
+# Bannit (http/https) les IP qui dépassent souvent la limite de /login
+[nginx-limit-req]
+enabled  = true
+backend  = auto
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 10

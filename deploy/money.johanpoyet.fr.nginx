@@ -1,8 +1,6 @@
-# /etc/nginx/sites-available/money.johanpoyet.fr  (bloc séparé : ne touche pas à Planify ni aux autres sites)
+# /etc/nginx/sites-available/money.johanpoyet.fr — copie de la config en production (bloc séparé, ne touche pas aux autres sites)
 # Certbot ajoutera lui-même le bloc 443 et la redirection HTTPS.
 server {
-    listen 80;
-    listen [::]:80;
     server_name money.johanpoyet.fr;
 
     server_tokens off;
@@ -10,6 +8,19 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "same-origin" always;
     add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Limite les tentatives de connexion : 10/min par IP (rafale de 5), au-delà 429.
+    location = /login {
+        limit_req zone=money_login_post burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:3002;
@@ -19,4 +30,26 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    listen [::]:443 ssl; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/money.johanpoyet.fr/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/money.johanpoyet.fr/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+
+server {
+    if ($host = money.johanpoyet.fr) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    listen [::]:80;
+    server_name money.johanpoyet.fr;
+    return 404; # managed by Certbot
+
+
 }
