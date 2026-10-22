@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* DA « Nuit » : tokens issus de la planche système. */
+@theme {
+  --color-bg: #11131b;
+  --color-surface: #1a1d28;
+  --color-surface-2: #232736;
+  --color-line: #2c3142;
+  --color-ink: #eceef5;
+  --color-muted: #9aa0b4;
+  --color-fixe: #8b9cff;
+  --color-courant: #f2b46b;
+  --color-plaisir: #e7799a;
+  --color-plus: #6fd3a5;
+  --color-over: #ff7a6b;
+  --color-fixe-soft: #22263a;
+  --color-courant-soft: #2d2a22;
+  --color-plaisir-soft: #2a2433;
+  --color-plus-soft: #1c2e28;
+
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, monospace;
+
+  --radius-card: 18px;
+  --radius-block: 22px;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-courant);
+  outline-offset: 2px;
+}
