@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Lancé par GitHub Actions sur le VPS après l'envoi du code dans /opt/money/app.
-# Ne touche qu'à l'app money (Planify et les autres sites ne sont pas concernés).
+# Lancé par GitHub Actions sur le VPS (utilisateur « money », sans sudo) après l'envoi du code.
+# Ne touche qu'à l'app money : Planify et les autres sites ne sont pas accessibles à cet utilisateur.
 set -euo pipefail
 cd /opt/money/app
 
 ln -sfn /opt/money/.env .env          # la config reste hors du dossier déployé
-chmod 700 deploy/backup.sh
 
 echo "▸ Dépendances"
 npm ci --no-audit --no-fund --loglevel=error

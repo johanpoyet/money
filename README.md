@@ -55,7 +55,10 @@ npm run dev
 
 ## Production (VPS)
 
-- App : PM2 `money` (127.0.0.1:3002) derrière Nginx `money.johanpoyet.fr`, certificat Let's Encrypt (renouvellement auto Certbot).
-- Crontab d'ubuntu (heure UTC) : synchro à 6 h (7 h l'hiver, 8 h l'été à Paris) → `/opt/money/sync.log` ; sauvegarde à 2 h 30 → `/opt/money/backups/`.
-- Restaurer une sauvegarde : `openssl enc -d -aes-256-cbc -pbkdf2 -pass file:/opt/money/keys/backup.pass -in money-AAAA-MM-JJ.sql.gz.enc | gunzip | docker exec -i money-postgres psql -U money -d money`
-- Compte de connexion : `cd /opt/money/app && npm run admin:create` puis `pm2 restart money`.
+- L'app tourne sous l'utilisateur **`money`** (sans sudo) : PM2 `money` (127.0.0.1:3002), crontab de synchro, clé de déploiement GitHub Actions. Une fuite de la clé de déploiement ne donne accès qu'à l'app, pas au reste du serveur.
+- Nginx `money.johanpoyet.fr` → 127.0.0.1:3002, HTTPS Let's Encrypt, HSTS, limite de tentatives sur `/login`, Fail2ban.
+- Crontab de `money` (UTC) : synchro à 6 h (7 h l'hiver, 8 h l'été à Paris) → `/opt/money/sync.log`.
+- Sauvegarde (crontab d'ubuntu, 2 h 30 UTC) : `/usr/local/sbin/money-backup` → `/opt/money-backups/` (illisible par `money`).
+- Restaurer : `openssl enc -d -aes-256-cbc -pbkdf2 -pass file:/opt/money-backups/backup.pass -in money-AAAA-MM-JJ.sql.gz.enc | gunzip | docker exec -i money-postgres psql -U money -d money`
+- Compte de connexion : `sudo -u money -H bash -c "cd /opt/money/app && npm run admin:create"` puis `sudo -u money -H pm2 restart money`.
+- Secrets GitHub Actions : `VPS_HOST`, `VPS_USER=money`, `VPS_SSH_KEY`.
