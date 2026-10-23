@@ -12,6 +12,13 @@ const SELECTED: Record<Cat["group"], string> = {
   hors: "border-2 border-plus bg-plus-soft",
 };
 
+const GROUP_LABELS: Record<Cat["group"], string> = {
+  fixe: "Fixe",
+  courant: "Vie courante",
+  plaisir: "Plaisir",
+  hors: "Hors budget",
+};
+
 export function EditForm(props: {
   id: number;
   categoryId: number | null;
@@ -27,6 +34,33 @@ export function EditForm(props: {
   const [note, setNote] = useState(props.note);
   const [excluded, setExcluded] = useState(props.excluded);
   const [state, setState] = useState<"idle" | "saving" | "error">("idle");
+  const [categories, setCategories] = useState(props.categories);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newGroup, setNewGroup] = useState<Cat["group"]>("courant");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createBusy, setCreateBusy] = useState(false);
+
+  async function createCategory() {
+    setCreateBusy(true);
+    setCreateError(null);
+    const res = await fetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newName, group: newGroup }),
+    });
+    setCreateBusy(false);
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      setCreateError(data?.error ?? "La création a échoué. Réessaie.");
+      return;
+    }
+    const created = (await res.json()) as Cat;
+    setCategories((cs) => [...cs, created]);
+    setCategoryId(created.id);
+    setCreating(false);
+    setNewName("");
+  }
 
   async function save() {
     setState("saving");
@@ -48,7 +82,7 @@ export function EditForm(props: {
       <fieldset className="flex flex-col">
         <legend className="mb-2.5 text-[13px] font-bold text-muted">Catégorie</legend>
         <div className="flex flex-wrap gap-2">
-          {props.categories.map((c) => {
+          {categories.map((c) => {
             const active = c.id === categoryId;
             return (
               <button
@@ -65,7 +99,69 @@ export function EditForm(props: {
               </button>
             );
           })}
+          {!creating && (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="flex h-10 items-center rounded-[14px] border border-dashed border-line px-3.5 text-[13px] font-semibold text-muted"
+            >
+              + Nouvelle
+            </button>
+          )}
         </div>
+
+        {creating && (
+          <div className="mt-3 flex flex-col gap-3 rounded-[22px] bg-surface p-4">
+            <label htmlFor="new-category" className="sr-only">
+              Nom de la catégorie
+            </label>
+            <input
+              id="new-category"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Nom de la catégorie"
+              maxLength={40}
+              autoFocus
+              className="h-11 rounded-xl border border-line bg-bg px-3 text-[15px]"
+            />
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(GROUP_LABELS) as Cat["group"][]).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  aria-pressed={g === newGroup}
+                  onClick={() => setNewGroup(g)}
+                  className={`flex h-10 items-center rounded-[14px] px-3.5 text-[13px] font-semibold ${
+                    g === newGroup ? SELECTED[g] : "border border-line"
+                  }`}
+                >
+                  {GROUP_LABELS[g]}
+                </button>
+              ))}
+            </div>
+            {createError && <p className="text-sm text-over">{createError}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCreating(false);
+                  setCreateError(null);
+                }}
+                className="h-11 grow rounded-[14px] border border-line text-sm font-semibold"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={createCategory}
+                disabled={createBusy || newName.trim() === ""}
+                className="h-11 grow rounded-[14px] bg-ink text-sm font-bold text-bg disabled:opacity-50"
+              >
+                {createBusy ? "Création…" : "Créer"}
+              </button>
+            </div>
+          </div>
+        )}
       </fieldset>
 
       <div className="flex flex-col gap-3 rounded-[22px] bg-surface p-4">
