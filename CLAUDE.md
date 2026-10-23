@@ -152,6 +152,8 @@ Il héberge aussi **Planify** (planify.johanpoyet.fr, PM2 de `ubuntu`, port 3000
 
 ## Git
 
+- **Toujours travailler sur une branche, jamais directement sur `main`.** Pour chaque modification : partir de `main` à jour (`git switch main && git pull`), créer une branche (`git switch -c feat/nom-court`, préfixe = type du commit : `feat/`, `fix/`, `chore/`, `docs/`…), y commiter, pousser la branche et ouvrir une PR vers `main` (`gh pr create`, titre et description en français). Pousser une branche ne déploie rien.
+- Le merge sur `main` (= déploiement en production) se fait seulement quand Johan le demande : `gh pr merge --squash --delete-branch`, puis `git switch main && git pull`.
 - Commits en français, au format conventionnel : `feat:`, `fix:`, `chore:`, `docs:`, `ci:`, `refactor:`, avec un scope si utile (`feat(sync): …`).
 - Un commit par changement logique.
 - **Ne jamais mentionner Claude ni un outil d'IA dans les commits ou les PR** : pas de `Co-Authored-By`, pas de « Generated with … », pas de signature.
