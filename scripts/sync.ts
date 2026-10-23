@@ -1,4 +1,4 @@
-/** Synchro lancée chaque matin par le cron PM2 (voir ecosystem.config.cjs). */
+// Synchro bancaire : lancée chaque matin par une tâche planifiée Dokploy (npm run sync).
 import "dotenv/config";
 
 async function main() {

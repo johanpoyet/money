@@ -69,7 +69,7 @@ async function main() {
     /* qrcode-terminal absent : le lien suffit */
   }
   console.log(totp.toString());
-  console.log("\nRedémarre ensuite l'app : pm2 restart money");
+  console.log("\nCopie ensuite ADMIN_PASSWORD_HASH (sans les antislashs) et ADMIN_TOTP_SECRET dans l'onglet Environment de Dokploy, puis redéploie.");
 }
 
 main().catch((e) => {
