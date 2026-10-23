@@ -20,8 +20,8 @@ Contexte pour les assistants de code qui travaillent sur ce dépôt. À lire ava
 | Banque | Enable Banking API (JWT RS256 signé avec la clé privée de l'app) |
 | Auth | Maison : mot de passe scrypt + TOTP (`otpauth`), cookie JWT HS256 (`jose`) |
 | Scripts | `tsx` (sync, seed, création du compte) |
-| Hébergement | VPS OVH Ubuntu 24.04 : Nginx → PM2 (127.0.0.1:3002), Certbot, Fail2ban |
-| CI/CD | GitHub Actions : vérification (types + build) puis déploiement par rsync + SSH |
+| Hébergement | VPS OVH Ubuntu 24.04 : Nginx (HTTPS, Certbot, Fail2ban) → Traefik (127.0.0.1:8080) → conteneur **Dokploy** |
+| CI/CD | **Dokploy** construit l'image (Dockerfile) et déploie à chaque push sur `main` ; GitHub Actions vérifie seulement types + build |
 
 ## Arborescence
 
@@ -54,7 +54,8 @@ src/
 ├── proxy.ts                      (= middleware en Next 16) : tout est privé sauf login, pages légales, manifeste
 scripts/   sync.ts (cron), seed.ts (catégories, budgets, règles, relabel), create-admin.ts
 drizzle/   migrations SQL générées (ne jamais les éditer à la main)
-deploy/    remote-deploy.sh, ecosystem.config.cjs, copies des configs Nginx / Fail2ban / sauvegarde
+deploy/    copies des configs Nginx (money, dokploy) / rate limit / Fail2ban / sauvegarde
+Dockerfile image de prod (migrations Drizzle au démarrage, puis next start sur le port 3000)
 .github/workflows/deploy.yml
 ```
 
@@ -89,32 +90,37 @@ ssh -N -L 5432:127.0.0.1:5432 vps        # dans un autre terminal
 
 ⚠️ Toute écriture en local (classement, seed, migration, sync) **modifie les vraies données de Johan**. Ne jamais lancer de requête destructive (DELETE, TRUNCATE, DROP, migration qui supprime une colonne) sans le lui demander explicitement.
 
-## Déploiement
+## Déploiement (Dokploy)
 
-- `git push` sur `main` → GitHub Actions : `npm ci` + typecheck + build, puis rsync vers `/opt/money/app/` (sans `.git`, `node_modules`, `.next`, `.env*`) et `deploy/remote-deploy.sh` sur le VPS (`npm ci`, migrations, build, `pm2 reload money`, contrôle HTTP).
-- L'app tourne sous l'utilisateur Linux **`money`, sans sudo**. La clé de déploiement ne donne accès qu'à ce compte.
-- Secrets GitHub : `VPS_HOST`, `VPS_USER=money`, `VPS_SSH_KEY`.
-- Tout changement de dépendance doit mettre à jour `package-lock.json` (sinon `npm ci` échoue en CI).
+- `main` = production. Un push (ou un merge de PR) sur `main` déclenche **Dokploy** (app GitHub reliée au repo) : build de l'image avec le `Dockerfile`, puis remplacement du conteneur. Les migrations Drizzle sont appliquées au démarrage du conteneur.
+- Interface : https://dokploy.johanpoyet.fr (projet « Money », app « money »). Logs, redéploiement, **rollback**, variables d'env : tout se fait là.
+- Variables d'env : onglet **Environment** de l'app dans Dokploy (pas de fichier `.env` dans l'image). Les valeurs y sont brutes : **pas d'antislash devant les `$`** (contrairement au `.env` local).
+- Dans le conteneur : `DATABASE_URL` pointe sur `money-postgres:5432` (réseau Docker `dokploy-network`), la clé Enable Banking est montée en lecture depuis le VPS (`/opt/money/keys/enablebanking.pem` → `/app/keys/enablebanking.pem`).
+- Synchro bancaire : tâche planifiée Dokploy (onglet Schedules) `npm run sync`, chaque jour à 6 h UTC.
+- GitHub Actions (`.github/workflows/ci.yml`) vérifie seulement typecheck + build sur les PR et sur `main`.
+- Tout changement de dépendance doit mettre à jour `package-lock.json` (sinon `npm ci` échoue au build).
+- Changer le mot de passe ou le TOTP : `npm run admin:create` en local, puis copier `ADMIN_PASSWORD_HASH` (sans les `\`) et `ADMIN_TOTP_SECRET` dans l'onglet Environment de Dokploy et redéployer.
 
 ## Le serveur (VPS OVH `51.210.180.130`, alias SSH `vps`, utilisateur `ubuntu`)
 
-Il héberge aussi **Planify** (planify.johanpoyet.fr, PM2 de `ubuntu`, port 3000), **johanpoyet.fr**, **budget.johanpoyet.fr** (autre app, `lea-budget`) et un monitoring Grafana/Prometheus en Docker.
+Il héberge aussi **Planify** (planify.johanpoyet.fr, PM2 de `ubuntu`, port 3000), **johanpoyet.fr** (pages statiques, dont le support de l'app Surcharge exigé par l'App Store), **budget.johanpoyet.fr** (site statique `lea-budget`) et un monitoring Grafana/Prometheus en Docker.
 
 ```
-/opt/money/            (ubuntu:money 750)
-├── .env               secrets de l'app (money, 600) — lié depuis app/.env
-├── app/               code déployé (money)
-├── keys/              enablebanking.pem (money, 600)
-└── db/                docker-compose Postgres + pgdata (ubuntu)
-/opt/money-backups/    sauvegardes chiffrées + backup.pass (ubuntu, illisible par money)
+Internet → Nginx :80/:443 (Certbot, en-têtes, rate limit, Fail2ban)
+             ├─ money.johanpoyet.fr   → 127.0.0.1:8080 (Traefik de Dokploy) → conteneur money:3000
+             ├─ dokploy.johanpoyet.fr → 127.0.0.1:8080 (Traefik) → interface Dokploy
+             └─ planify / budget / johanpoyet.fr : inchangés
+/etc/dokploy/          config Dokploy et Traefik (traefik.yml, dynamic/)
+/opt/money/keys/       enablebanking.pem (lu par le conteneur)
+/opt/money/db/         docker-compose Postgres + pgdata (relié au réseau dokploy-network)
+/opt/money-backups/    sauvegardes chiffrées + backup.pass
 /usr/local/sbin/money-backup   script de sauvegarde (root), crontab d'ubuntu 2 h 30 UTC
-/etc/nginx/sites-available/money.johanpoyet.fr, /etc/nginx/conf.d/money-ratelimit.conf
+/etc/nginx/sites-available/money.johanpoyet.fr, dokploy.johanpoyet.fr, /etc/nginx/conf.d/money-ratelimit.conf
 /etc/fail2ban/jail.d/money.local
 ```
 
-- Postgres : conteneur `money-postgres`, uniquement sur `127.0.0.1:5432`.
-- Synchro : crontab de `money`, 6 h UTC (7 h l'hiver, 8 h l'été à Paris) → `/home/money/sync.log`.
-- PM2 de l'app : `sudo -u money -H pm2 status|logs money|restart money`.
+- Postgres : conteneur `money-postgres`, sur `127.0.0.1:5432` et sur le réseau `dokploy-network`.
+- Dokploy tourne en Docker Swarm (`docker service ls`) ; Traefik est le conteneur `dokploy-traefik`, publié **uniquement** sur `127.0.0.1:8080`, avec `forwardedHeaders.trustedIPs` pour faire confiance à Nginx.
 - Le serveur est en UTC.
 
 ### 🔴 Règles absolues sur le serveur
@@ -123,6 +129,7 @@ Il héberge aussi **Planify** (planify.johanpoyet.fr, PM2 de `ubuntu`, port 3000
 
 - Nginx : toujours `sudo nginx -t` avant `systemctl reload nginx`. Ne jamais toucher aux blocs des autres sites.
 - Changer la *clé* d'une zone `limit_req` existante échoue silencieusement au reload (l'ancienne config reste active) : renommer la zone.
+- **Dokploy ne doit jamais prendre les ports 80/443** (ils sont à Nginx) : dans Dokploy, ne pas activer HTTPS/Let's Encrypt sur les domaines, ne pas utiliser « Reload Traefik » / « Modify ports » ni mettre de domaine HTTPS dans Settings → Web Server.
 - Fail2ban surveille les 429 de Nginx : ne pas marteler `/login` en test depuis l'IP de Johan (il se ferait bannir de tous ses sites pendant 1 h). Débannir : `sudo fail2ban-client set nginx-limit-req unbanip <IP>`.
 
 ## Conventions de code
